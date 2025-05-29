@@ -26,6 +26,8 @@ Note: The other one is not tested, please paste the **Direct File Link** (If you
 
 How to get direct file link? 
 
+https://github.com/user-attachments/assets/f5b6355b-3b5b-485a-a3b8-05c798f31f66
+
 Want to try? <br />
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/LoggingNewMemory/KanagawaMirrorBot/blob/main/bot.ipynb)
