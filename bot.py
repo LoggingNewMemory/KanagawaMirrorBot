@@ -328,6 +328,8 @@ if __name__ == "__main__":
     # download_multiple(urls)
 
     print("🤖 Downloader Bot Ready!")
+
+    print("please make '+ Code' and paste the url")
     print("Usage:")
-    print("  download_file('your_url_here')")
-    print("  download_multiple(['url1', 'url2', ...])")
+    print("download_file('your_url_here')")
+    print("download_multiple(['url1', 'url2', ...])")
