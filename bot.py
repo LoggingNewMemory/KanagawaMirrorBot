@@ -434,4 +434,4 @@ if __name__ == "__main__":
     print("download_multiple(['url1', 'url2', ...])")
 
 # Template
-download_file(' ')
+download_file('')
