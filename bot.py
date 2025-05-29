@@ -432,10 +432,6 @@ if __name__ == "__main__":
     print("Usage:")
     print("download_file('your_url_here')")
     print("download_multiple(['url1', 'url2', ...])")
-    print("")
-    print("Examples:")
-    print("download_file('https://www.mediafire.com/file/xxxxx/filename.zip/file')")
-    print("download_file('https://sourceforge.net/projects/project/files/file.zip/download')")
 
 # Template
 download_file('https://download2275.mediafire.com/z3fcqagvyxngwFDX7EtJXgNBL5BDG4PibQvins2HmiHSzsldjgsAfis9SPo4na4D0cBvthv4QuqJfjvl6h4nZ-PTDXPjkWGgCOEsYUMUhquY0Ohk93fMEiK9XgWN7Dxkj2YZoXtGk9W32wBkSfSfRBId5TF0QWYSKHG3yZ-uc3Gdog/l0i0b596zenk0hp/HIOS+15.0.3.zip')
