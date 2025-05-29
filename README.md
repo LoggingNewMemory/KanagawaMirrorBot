@@ -1,6 +1,7 @@
 # Mirror Bot
 
-I try to make something
+Mirror Bot that transfer the file to User Google Drive <br />
+Note: Take some time for the file to appear in GDrive
 
 Want to try? <br />
 
