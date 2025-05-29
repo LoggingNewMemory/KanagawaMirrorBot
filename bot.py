@@ -434,4 +434,4 @@ if __name__ == "__main__":
     print("download_multiple(['url1', 'url2', ...])")
 
 # Template
-download_file('https://download2275.mediafire.com/z3fcqagvyxngwFDX7EtJXgNBL5BDG4PibQvins2HmiHSzsldjgsAfis9SPo4na4D0cBvthv4QuqJfjvl6h4nZ-PTDXPjkWGgCOEsYUMUhquY0Ohk93fMEiK9XgWN7Dxkj2YZoXtGk9W32wBkSfSfRBId5TF0QWYSKHG3yZ-uc3Gdog/l0i0b596zenk0hp/HIOS+15.0.3.zip')
+download_file(' ')
