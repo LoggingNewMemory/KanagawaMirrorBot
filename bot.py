@@ -27,262 +27,307 @@ from IPython.display import display, HTML
 import shutil
 import re
 
-class MirrorBot:
-    def __init__(self):
-        self.download_dir = "/content/downloads"
-        self.drive_dir = "/content/drive/MyDrive/MirrorBot"
-        self.mount_drive()
-        self.setup_directories()
+# SYNC From here
 
-    def mount_drive(self):
-        """Mount Google Drive"""
+cl#!/usr/bin/env python3
+
+class DownloaderBot:
+    def __init__(self):
+        self.session = requests.Session()
+        # Emulate Linux enviroment (Avoid 403)
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none'
+        })
+
+        self.download_path = "/content/downloads/"
+        self.setup_environment()
+
+    def setup_environment(self):
+        """Setup download directory and mount Google Drive"""
+        os.makedirs(self.download_path, exist_ok=True)
+
+        # Mount User Google Drive
         try:
             drive.mount('/content/drive')
             print("✅ Google Drive mounted successfully")
+
+            # Create Drive Folder if Doesn't exist
+            self.drive_path = "/content/drive/MyDrive/KanagawaMirrorBot/"
+            os.makedirs(self.drive_path, exist_ok=True)
         except Exception as e:
-            print(f"❌ Error mounting drive: {e}")
+            print(f"⚠️ Failed to mount Google Drive: {e}")
+            self.drive_path = None
 
-    def setup_directories(self):
-        """Create necessary directories"""
-        os.makedirs(self.download_dir, exist_ok=True)
-        os.makedirs(self.drive_dir, exist_ok=True)
-        print(f"📁 Directories created: {self.download_dir}, {self.drive_dir}")
-
-    def download_sourceforge(self, sf_url, custom_name=None):
-        """
-        Download a file from SourceForge by converting the project link
-        to a direct download URL and deferring to download_file().
-        """
-        # Parse project and filepath out of the SourceForge URL
-        m = re.match(r".*projects/([^/]+)/files/(.*)/download", sf_url)
-        if not m:
-            print(f"❌ Invalid SourceForge URL: {sf_url}")
-            return None
-        project, filepath = m.groups()
-
-        # Build the direct master.dl URL
-        direct_url = (
-            f"https://master.dl.sourceforge.net/project/"
-            f"{project}/{filepath}?viasf=1"
-        )
-        return self.download_file(direct_url, custom_name)
-
-    def download_file(self, url, custom_name=None):
-        """Download file with speed/ETA and preserved filename"""
-        # Auto-route SourceForge “/download” links
-        if 'sourceforge.net/projects' in url and url.endswith('/download'):
-            return self.download_sourceforge(url, custom_name)
+    # Handle sourceforge anomaly dawg (Use modified SF Downloader)
+    def parse_sourceforge_url(self, url):
+        """Parse SourceForge URL to get direct download link"""
+        if 'sourceforge.net' not in url:
+            return url  
 
         try:
-            print(f"🔄 Starting download: {url}")
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            }
-            response = requests.get(url, headers=headers, stream=True)
+            # Extract project and filepath from SourceForge URL
+            project_match = re.search(r'projects/([^/]*)/files', url)
+            filepath_match = re.search(r'files/(.*?)(?:/download|$)', url)
+
+            if project_match and filepath_match:
+                project = project_match.group(1)
+                filepath = filepath_match.group(1)
+
+                # Construct direct download URL (Master Mirror)
+                direct_url = f"https://master.dl.sourceforge.net/project/{project}/{filepath}?viasf=1"
+                print(f"📡 Converted SourceForge URL: {direct_url}")
+                return direct_url
+            else:
+                print("⚠️ Could not parse SourceForge URL, using original")
+                return url
+        except Exception as e:
+            print(f"⚠️ Error parsing SourceForge URL: {e}")
+            return url
+
+    def get_filename_from_url(self, url, response=None):
+        """Extract filename from URL or response headers"""
+        filename = None
+
+        # Try to get filename from Content-Disposition header
+        if response and 'content-disposition' in response.headers:
+            cd = response.headers['content-disposition']
+            filename_match = re.search(r'filename[*]?=([^;]+)', cd)
+            if filename_match:
+                filename = filename_match.group(1).strip('"\'')
+                filename = unquote(filename)  # URL decode
+
+        # Fallback to URL parsing
+        if not filename:
+            parsed_url = urlparse(url)
+            filename = os.path.basename(parsed_url.path)
+
+            # Remove query parameters like ?viasf=1
+            if '?' in filename:
+                filename = filename.split('?')[0]
+
+        # Ensure we have a filename
+        if not filename or filename == '/':
+            filename = 'downloaded_file'
+
+        return filename
+
+    def format_size(self, bytes_size):
+        """Convert bytes to human readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes_size < 1024.0:
+                return f"{bytes_size:.1f} {unit}"
+            bytes_size /= 1024.0
+        return f"{bytes_size:.1f} TB"
+
+    def format_time(self, seconds):
+        """Convert seconds to human readable format"""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:
+            return f"{int(seconds//60)}m {int(seconds%60)}s"
+        else:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
+
+    def download_with_progress(self, url, filename):
+        """Download file with progress tracking"""
+        print(f"🚀 Starting download: {filename}")
+
+        try:
+            # Get file info
+            response = self.session.head(url, allow_redirects=True)
+            total_size = int(response.headers.get('content-length', 0))
+
+            if total_size == 0:
+                print("⚠️ Could not determine file size")
+            else:
+                print(f"📦 File size: {self.format_size(total_size)}")
+
+            # Start download
+            response = self.session.get(url, stream=True, allow_redirects=True)
             response.raise_for_status()
 
-            # Determine filename
-            if custom_name:
-                filename = custom_name
-            else:
-                filename = self.get_filename_from_url(url, response)
-            filename = self.sanitize_filename(filename)
+            filepath = os.path.join(self.download_path, filename)
 
-            filepath = os.path.join(self.download_dir, filename)
-            # Handle duplicates...
-            if os.path.exists(filepath):
-                base, ext = os.path.splitext(filename)
-                counter = 1
-                while os.path.exists(filepath):
-                    filename = f"{base}_{counter}{ext}"
-                    filepath = os.path.join(self.download_dir, filename)
-                    counter += 1
-
-            print(f"📁 Saving as: {filename}")
-            total_size = int(response.headers.get('content-length', 0))
             downloaded = 0
             start_time = time.time()
-            last_time = start_time
-            last_downloaded = 0
-            speed_samples = []
-            max_samples = 10
+            last_update = start_time
 
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
-                    if not chunk:
-                        continue
-                    f.write(chunk)
-                    downloaded += len(chunk)
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
 
-                    now = time.time()
-                    elapsed = now - last_time
-                    if elapsed >= 0.5:
-                        delta = downloaded - last_downloaded
-                        curr_speed = delta / elapsed if elapsed > 0 else 0
-                        speed_samples.append(curr_speed)
-                        if len(speed_samples) > max_samples:
-                            speed_samples.pop(0)
+                        current_time = time.time()
+                        if current_time - last_update >= 1.0:  # Update every second
+                            elapsed = current_time - start_time
+                            speed = downloaded / elapsed if elapsed > 0 else 0
 
-                        avg_speed = sum(speed_samples) / len(speed_samples)
-                        if total_size:
-                            pct = downloaded / total_size * 100
-                            eta = self.estimate_time_remaining(
-                                downloaded, total_size, avg_speed
-                            )
-                            print(
-                                f"\r📥 {pct:.1f}% | {self.format_speed(avg_speed)}"
-                                f" | ETA: {eta} | "
-                                f"{self.format_size(downloaded)}/{self.format_size(total_size)}",
-                                end='', flush=True
-                            )
-                        else:
-                            print(
-                                f"\r📥 {self.format_speed(avg_speed)} | "
-                                f"{self.format_size(downloaded)} downloaded",
-                                end='', flush=True
-                            )
+                            if total_size > 0:
+                                progress = (downloaded / total_size) * 100
+                                eta = (total_size - downloaded) / speed if speed > 0 else 0
 
-                        last_time = now
-                        last_downloaded = downloaded
+                                print(f"\r📊 Progress: {progress:.1f}% | "
+                                      f"Speed: {self.format_size(speed)}/s | "
+                                      f"ETA: {self.format_time(eta)} | "
+                                      f"Downloaded: {self.format_size(downloaded)}", end='')
+                            else:
+                                print(f"\r📊 Downloaded: {self.format_size(downloaded)} | "
+                                      f"Speed: {self.format_size(speed)}/s", end='')
 
-            total_time = time.time() - start_time
-            avg_speed = downloaded / total_time if total_time > 0 else 0
-            print(f"\n✅ Downloaded: {filename}")
-            print(
-                f"📊 Size: {self.format_size(downloaded)} | "
-                f"Time: {total_time:.1f}s | Avg Speed: {self.format_speed(avg_speed)}"
-            )
+                            last_update = current_time
+
+            print(f"\n✅ Download completed: {filename}")
             return filepath
 
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Download failed: {e}")
+            return None
         except Exception as e:
-            print(f"\n❌ Download failed: {e}")
+            print(f"❌ Unexpected error: {e}")
             return None
 
-    def format_size(self, bytes):
-        """Format file size"""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if bytes < 1024:
-                return f"{bytes:.1f} {unit}"
-            bytes /= 1024
-        return f"{bytes:.1f} TB"
+    def upload_to_drive(self, filepath):
+        """Upload file to Google Drive"""
+        if not self.drive_path:
+            print("⚠️ Google Drive not available, skipping upload")
+            return False
 
-    def extract_archive(self, filepath):
-        """Extract compressed files"""
-        try:
-            extract_dir = os.path.splitext(filepath)[0]
-            os.makedirs(extract_dir, exist_ok=True)
-
-            print(f"📦 Extracting archive...")
-
-            if filepath.endswith(('.zip', '.jar')):
-                with zipfile.ZipFile(filepath, 'r') as zip_ref:
-                    zip_ref.extractall(extract_dir)
-            elif filepath.endswith(('.tar', '.tar.gz', '.tgz', '.gz')):
-                # Handle .gz files (including .img.gz)
-                if filepath.endswith('.gz') and not filepath.endswith(('.tar.gz', '.tgz')):
-                    # Single file gzip
-                    import gzip
-                    output_file = filepath[:-3]  # Remove .gz extension
-                    with gzip.open(filepath, 'rb') as gz_file:
-                        with open(output_file, 'wb') as out_file:
-                            shutil.copyfileobj(gz_file, out_file)
-                    print(f"✅ Extracted to: {output_file}")
-                    return output_file
-                else:
-                    # Tar archives
-                    with tarfile.open(filepath, 'r:*') as tar_ref:
-                        tar_ref.extractall(extract_dir)
-            else:
-                print("⚠️ Not a supported archive format")
-                return filepath
-
-            print(f"✅ Extracted to: {extract_dir}")
-            return extract_dir
-
-        except Exception as e:
-            print(f"❌ Extraction failed: {e}")
-            return filepath
-
-    def move_to_drive(self, filepath):
-        """Move downloaded file to Google Drive"""
         try:
             filename = os.path.basename(filepath)
-            drive_path = os.path.join(self.drive_dir, filename)
+            drive_filepath = os.path.join(self.drive_path, filename)
 
-            print(f"☁️ Moving to Google Drive...")
+            print(f"☁️ Uploading to Google Drive: {filename}")
 
-            if os.path.isdir(filepath):
-                shutil.copytree(filepath, drive_path, dirs_exist_ok=True)
-            else:
-                shutil.copy2(filepath, drive_path)
+            # Copy file to Google Drive
+            with open(filepath, 'rb') as src, open(drive_filepath, 'wb') as dst:
+                total_size = os.path.getsize(filepath)
+                uploaded = 0
+                start_time = time.time()
 
-            print(f"✅ Moved to Drive: {drive_path}")
-            return drive_path
+                while True:
+                    chunk = src.read(8192)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+                    uploaded += len(chunk)
+
+                    # Show upload progress
+                    if total_size > 0:
+                        progress = (uploaded / total_size) * 100
+                        elapsed = time.time() - start_time
+                        speed = uploaded / elapsed if elapsed > 0 else 0
+
+                        print(f"\r☁️ Upload: {progress:.1f}% | "
+                              f"Speed: {self.format_size(speed)}/s", end='')
+
+            print(f"\n✅ Upload completed: {filename}")
+            return True
 
         except Exception as e:
-            print(f"❌ Failed to move to Drive: {e}")
-            return None
+            print(f"❌ Upload failed: {e}")
+            return False
 
-    def list_downloads(self):
-        """List all downloaded files"""
-        print("\n📋 Downloaded Files:")
-        print("-" * 60)
-
-        total_files = 0
-        total_size = 0
-
-        for root, dirs, files in os.walk(self.download_dir):
-            level = root.replace(self.download_dir, '').count(os.sep)
-            indent = ' ' * 2 * level
-            if level == 0 and files:
-                print(f"{indent}📁 {os.path.basename(root) or 'downloads'}/")
-            elif level > 0:
-                print(f"{indent}📁 {os.path.basename(root)}/")
-
-            subindent = ' ' * 2 * (level + 1)
-            for file in files:
-                filepath = os.path.join(root, file)
-                size = os.path.getsize(filepath)
-                total_files += 1
-                total_size += size
-                print(f"{subindent}📄 {file} ({self.format_size(size)})")
-
-        print("-" * 60)
-        print(f"📊 Total: {total_files} files, {self.format_size(total_size)}")
-
-    def clear_downloads(self):
-        """Clear download directory"""
+    def cleanup_local_file(self, filepath):
+        """Remove local file after upload"""
         try:
-            shutil.rmtree(self.download_dir)
-            os.makedirs(self.download_dir, exist_ok=True)
-            print("🗑️ Downloads cleared")
+            os.remove(filepath)
+            print(f"🗑️ Local file cleaned up: {os.path.basename(filepath)}")
         except Exception as e:
-            print(f"❌ Error clearing downloads: {e}")
+            print(f"⚠️ Could not clean up local file: {e}")
 
-    def mirror(self, url, extract=False, move_to_drive=True, custom_name=None):
-        """Main mirror function"""
-        print(f"🚀 Mirror Bot Starting...")
-        print(f"📂 Download directory: {self.download_dir}")
-        print(f"☁️ Drive directory: {self.drive_dir}")
-        print("=" * 60)
+    def download_and_upload(self, url, keep_local=False):
+        """Main function to download and upload to Google Drive"""
+        print(f"🎯 Processing URL: {url}")
+
+        # Parse SourceForge URLs
+        direct_url = self.parse_sourceforge_url(url)
+
+        # Get filename
+        try:
+            head_response = self.session.head(direct_url, allow_redirects=True)
+            filename = self.get_filename_from_url(direct_url, head_response)
+        except:
+            filename = self.get_filename_from_url(direct_url)
+
+        print(f"📄 Filename: {filename}")
 
         # Download file
-        filepath = self.download_file(url, custom_name)
-        if not filepath:
-            return None
+        filepath = self.download_with_progress(direct_url, filename)
 
-        # Extract if requested and it's an archive
-        if extract:
-            filepath = self.extract_archive(filepath)
+        if filepath and os.path.exists(filepath):
+            # Upload to Google Drive
+            upload_success = self.upload_to_drive(filepath)
 
-        # Move to Google Drive if requested
-        if move_to_drive:
-            drive_path = self.move_to_drive(filepath)
-            if drive_path:
-                print(f"✨ Mirror completed! File saved to Drive")
-                return drive_path
+            # Cleanup local file unless requested to keep
+            if upload_success and not keep_local:
+                self.cleanup_local_file(filepath)
 
-        print(f"✨ Mirror completed! File saved locally")
-        return filepath
+            return filepath if keep_local else upload_success
+        else:
+            print("❌ Download failed")
+            return False
 
-mirror_file("https://sourceforge.net/projects/andyyan-gsi/files/lineage-22-light/lineage-22.2-20250522-UNOFFICIAL-gsi_arm64_gN-signed.img.gz/download")
+# Usage functions
+def download_file(url, keep_local=False):
+    """Simple function to download a file"""
+    bot = DownloaderBot()
+    return bot.download_and_upload(url, keep_local)
+
+def download_multiple(urls, keep_local=False):
+    """Download multiple files"""
+    bot = DownloaderBot()
+    results = []
+
+    for i, url in enumerate(urls, 1):
+        print(f"\n{'='*50}")
+        print(f"📥 Downloading {i}/{len(urls)}")
+        print(f"{'='*50}")
+
+        result = bot.download_and_upload(url, keep_local)
+        results.append((url, result))
+
+        if i < len(urls):
+            print("⏳ Waiting 2 seconds before next download...")
+            time.sleep(2)
+
+    # Summary
+    print(f"\n{'='*50}")
+    print("📋 DOWNLOAD SUMMARY")
+    print(f"{'='*50}")
+
+    successful = sum(1 for _, result in results if result)
+    print(f"✅ Successful: {successful}/{len(urls)}")
+
+    for url, result in results:
+        status = "✅" if result else "❌"
+        print(f"{status} {url}")
+
+    return results
+
+# Example usage
+if __name__ == "__main__":
+    # Single file download
+    # download_file("https://sourceforge.net/projects/myproject/files/folder/filename.zip/download")
+
+    # Multiple files download
+    # urls = [
+    #     "https://sourceforge.net/projects/project1/files/file1.zip/download",
+    #     "https://sourceforge.net/projects/project2/files/file2.zip/download"
+    # ]
+    # download_multiple(urls)
+
+    print("🤖 Downloader Bot Ready!")
+    print("Usage:")
+    print("  download_file('your_url_here')")
+    print("  download_multiple(['url1', 'url2', ...])")
