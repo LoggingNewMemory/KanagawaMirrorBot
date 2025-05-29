@@ -34,7 +34,7 @@ Tested on:
 
 Note: The other one is not tested, please paste the **Direct File Link** (If you don't know then download normally then copy the downloaded link from the download page the link and paste it here)
 
-Still confused? Read the github. I give an example on how to do that
+Still confused? [Watch This](https://github.com/user-attachments/assets/f5b6355b-3b5b-485a-a3b8-05c798f31f66)
 """
 
 # Install required packages
