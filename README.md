@@ -1,4 +1,4 @@
-# Mirror Bot
+# Kanagawa Mirror Bot
 
 Mirror Bot that transfer the file to User Google Drive <br />
 Note: Take some time for the file to appear in GDrive
