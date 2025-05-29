@@ -29,9 +29,12 @@ How to use?
 Tested on:
 - SourceForge
 - Github
+- Drive 🗿
 - MediaFire (Need the direct file link)
 
 Note: The other one is not tested, please paste the **Direct File Link** (If you don't know then download normally then copy the downloaded link from the download page the link and paste it here)
+
+Still confused? Read the github. I give an example on how to do that
 """
 
 # Install required packages
