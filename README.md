@@ -24,6 +24,8 @@ Tested on:
 
 Note: The other one is not tested, please paste the **Direct File Link** (If you don't know then download normally then copy the downloaded link from the download page the link and paste it here)
 
+How to get direct file link? 
+
 Want to try? <br />
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/LoggingNewMemory/KanagawaMirrorBot/blob/main/bot.ipynb)
