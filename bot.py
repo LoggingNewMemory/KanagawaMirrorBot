@@ -312,7 +312,6 @@ def download_file(url, keep_local=False):
 # Example usage
 if __name__ == "__main__":
     print("🤖 Downloader Bot Ready!")
-    print("Supported platforms: SourceForge and general HTTP downloads")
     print("")
     print("Usage:")
     print("download_file('your_url_here')")
