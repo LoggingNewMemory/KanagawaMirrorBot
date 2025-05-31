@@ -56,12 +56,6 @@ import tempfile
 import six
 import tqdm
 
-# SYNC From here
-
-#!/usr/bin/env python3
-
-CHUNK_SIZE = 512 * 1024  # 512KB
-
 class DownloaderBot:
     def __init__(self):
         self.session = requests.Session()
@@ -96,83 +90,6 @@ class DownloaderBot:
         except Exception as e:
             print(f"⚠️ Failed to mount Google Drive: {e}")
             self.drive_path = None
-
-    def extract_mediafire_download_link(self, contents):
-        """Extract MediaFire direct download link"""
-        for line in contents.splitlines():
-            m = re.search(r'href="((http|https)://download[^"]+)', line)
-            if m:
-                return m.groups()[0]
-
-    def download_mediafire(self, url, filename=None):
-        """Download from MediaFire with proper handling"""
-        print(f"🎯 Processing MediaFire URL: {url}")
-
-        # Use MediaFire-specific headers
-        sess = requests.session()
-        sess.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.178 Safari/537.36"
-        }
-
-        while True:
-            res = sess.get(url, stream=True)
-            if 'Content-Disposition' in res.headers:
-                # This is the file
-                break
-
-            # Need to redirect with confirmation
-            url = self.extract_mediafire_download_link(res.text)
-
-            if url is None:
-                print('❌ Permission denied or invalid MediaFire URL')
-                print("Maybe you need to change permission to 'Anyone with the link'?")
-                return None
-
-        # Get filename from Content-Disposition header
-        if filename is None:
-            m = re.search('filename="(.*)"', res.headers['Content-Disposition'])
-            if m:
-                filename = m.groups()[0]
-                filename = filename.encode('iso8859').decode('utf-8')
-            else:
-                filename = 'mediafire_download'
-
-        print(f"📄 Filename: {filename}")
-        filepath = os.path.join(self.download_path, filename)
-
-        # Download with progress
-        try:
-            total = res.headers.get('Content-Length')
-            if total is not None:
-                total = int(total)
-                print(f"📦 File size: {self.format_size(total)}")
-
-            downloaded = 0
-            start_time = time.time()
-
-            with open(filepath, 'wb') as f:
-                for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-
-                    current_time = time.time()
-                    elapsed = current_time - start_time
-                    speed = downloaded / elapsed if elapsed > 0 else 0
-
-                    if total and elapsed > 1:  # Update every second after first second
-                        progress = (downloaded / total) * 100
-                        eta = (total - downloaded) / speed if speed > 0 else 0
-
-                        print(f"\r📊 Progress: {progress:.1f}% | "
-                              f"Speed: {self.format_size(speed)}/s | "
-                              f"ETA: {self.format_time(eta)}", end='')
-
-            print(f"\n✅ MediaFire download completed: {filename}")
-            return filepath
-
-        except Exception as e:
-            print(f"❌ MediaFire download failed: {e}")
-            return None
 
     # Handle sourceforge anomaly dawg (Use modified SF Downloader)
     def parse_sourceforge_url(self, url):
@@ -358,24 +275,20 @@ class DownloaderBot:
         """Main function to download and upload to Google Drive"""
         print(f"🎯 Processing URL: {url}")
 
-        # Check if it's a MediaFire URL
-        if 'mediafire.com' in url:
-            filepath = self.download_mediafire(url)
-        else:
-            # Parse SourceForge URLs
-            direct_url = self.parse_sourceforge_url(url)
+        # Parse SourceForge URLs
+        direct_url = self.parse_sourceforge_url(url)
 
-            # Get filename
-            try:
-                head_response = self.session.head(direct_url, allow_redirects=True)
-                filename = self.get_filename_from_url(direct_url, head_response)
-            except:
-                filename = self.get_filename_from_url(direct_url)
+        # Get filename
+        try:
+            head_response = self.session.head(direct_url, allow_redirects=True)
+            filename = self.get_filename_from_url(direct_url, head_response)
+        except:
+            filename = self.get_filename_from_url(direct_url)
 
-            print(f"📄 Filename: {filename}")
+        print(f"📄 Filename: {filename}")
 
-            # Download file
-            filepath = self.download_with_progress(direct_url, filename)
+        # Download file
+        filepath = self.download_with_progress(direct_url, filename)
 
         if filepath and os.path.exists(filepath):
             # Upload to Google Drive
@@ -390,51 +303,19 @@ class DownloaderBot:
             print("❌ Download failed")
             return False
 
-# Usage functions
+# Usage function
 def download_file(url, keep_local=False):
     """Simple function to download a file"""
     bot = DownloaderBot()
     return bot.download_and_upload(url, keep_local)
 
-def download_multiple(urls, keep_local=False):
-    """Download multiple files"""
-    bot = DownloaderBot()
-    results = []
-
-    for i, url in enumerate(urls, 1):
-        print(f"\n{'='*50}")
-        print(f"📥 Downloading {i}/{len(urls)}")
-        print(f"{'='*50}")
-
-        result = bot.download_and_upload(url, keep_local)
-        results.append((url, result))
-
-        if i < len(urls):
-            print("⏳ Waiting 2 seconds before next download...")
-            time.sleep(2)
-
-    # Summary
-    print(f"\n{'='*50}")
-    print("📋 DOWNLOAD SUMMARY")
-    print(f"{'='*50}")
-
-    successful = sum(1 for _, result in results if result)
-    print(f"✅ Successful: {successful}/{len(urls)}")
-
-    for url, result in results:
-        status = "✅" if result else "❌"
-        print(f"{status} {url}")
-
-    return results
-
 # Example usage
 if __name__ == "__main__":
-    print("🤖 Downloader Bot Ready with MediaFire Support!")
-    print("Supported platforms: SourceForge, MediaFire, and general HTTP downloads")
+    print("🤖 Downloader Bot Ready!")
+    print("Supported platforms: SourceForge and general HTTP downloads")
     print("")
     print("Usage:")
     print("download_file('your_url_here')")
-    print("download_multiple(['url1', 'url2', ...])")
 
 # Template
 download_file('')
